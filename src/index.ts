@@ -5,6 +5,7 @@ import bcrypt from 'bcrypt'
 import mongoose from 'mongoose'
 import jwt from 'jsonwebtoken'
 import { JWT_KEY } from './config'
+import { AuthMiddlware } from './middleware'
 // const JWT_KEY = 'ashintv'
 
 
@@ -42,7 +43,7 @@ app.post('/api/v1/signin',async (req, res) => {
                 const passCheck = await bcrypt.compare(req.body.password , user.password)
                 if(passCheck){
                         //@ts-ignore
-                        const token = jwt.sign({ username:req.body.username } , JWT_KEY )
+                        const token = jwt.sign({ id:user._id } , JWT_KEY )
                         res.status(200).json(token)
                 }else{
                         res.status(400).json({msg:'Incorrect Password'})
@@ -83,7 +84,7 @@ app.post('/api/v1/content', (req, res) => {
 })
 
 
-app.get('/api/v1/content', (req, res) => {
+app.get('/api/v1/content',AuthMiddlware, (req, res) => {
         res.status(200).send('hurray')
 })
 
