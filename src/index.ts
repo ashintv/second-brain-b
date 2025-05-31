@@ -1,6 +1,6 @@
 import express from 'express'
 import z, { string } from 'zod'
-import { UserModel } from './db'
+import { ContentModel, UserModel } from './db'
 import bcrypt from 'bcrypt'
 import mongoose from 'mongoose'
 import jwt from 'jsonwebtoken'
@@ -24,29 +24,29 @@ const app = express()
 app.use(express.json())
 
 
-app.post('/api/v1/signin',async (req, res) => {
+app.post('/api/v1/signin', async (req, res) => {
         const Parse = UserZSchema.safeParse(req.body)
-        if(Parse){
-                const user = await UserModel.findOne  ( {
-                        username:req.body.username,
-                        
+        if (Parse) {
+                const user = await UserModel.findOne({
+                        username: req.body.username,
+
                 })
                 //@ts-ignore
-                console.log(user.username ,JWT_KEY)
-                
-                if (!user){
-                        res.status(400).json({msg:'Incorrect Username'})
+                console.log(user.username, JWT_KEY)
+
+                if (!user) {
+                        res.status(400).json({ msg: 'Incorrect Username' })
                         return
                 }
-                
+
                 // @ts-ignore
-                const passCheck = await bcrypt.compare(req.body.password , user.password)
-                if(passCheck){
+                const passCheck = await bcrypt.compare(req.body.password, user.password)
+                if (passCheck) {
                         //@ts-ignore
-                        const token = jwt.sign({ id:user._id } , JWT_KEY )
+                        const token = jwt.sign({ id: user._id }, JWT_KEY)
                         res.status(200).json(token)
-                }else{
-                        res.status(400).json({msg:'Incorrect Password'})
+                } else {
+                        res.status(400).json({ msg: 'Incorrect Password' })
                         return
                 }
 
@@ -66,7 +66,7 @@ app.post('/api/v1/signup', async (req, res) => {
                         res.status(200).json({
                                 message: 'User signed up successfully'
                         })
-                        return 
+                        return
 
                 } catch (e: unknown) {
                         res.status(500).send(e)
@@ -74,22 +74,64 @@ app.post('/api/v1/signup', async (req, res) => {
                 }
         }
         res.status(400).send(Parse.error)
-        
+
 
 })
 
 
-app.post('/api/v1/content', (req, res) => {
+app.get('/api/v1/content', AuthMiddlware, async (req, res) => {
+        try {
+                const data = await ContentModel.find({
+                        //@ts-ignore
+                        UserID: req.userID
+                })
+
+                res.status(200).json(data)
+        } catch (e) {
+                res.status(400).json({
+                        msge: 'unable fetch your data'
+                })
+        }
 
 })
 
 
-app.get('/api/v1/content',AuthMiddlware, (req, res) => {
-        res.status(200).send('hurray')
+app.post('/api/v1/content', AuthMiddlware, async (req, res) => {
+        const ContentF = z.object({
+                title: z.string(),
+                link: z.string(),
+
+        })
+        const Parse = ContentF.safeParse(req.body)
+        if (Parse.success) {
+                try {
+                        await ContentModel.create(req.body)
+                        res.status(200).json(Parse)
+                } catch (e) {
+                        res.status(400).json(e)
+                        return
+                }
+        }
+        else {
+                res.status(400).json(Parse.error)
+
+        }
 })
 
-app.delete('/api/v1/content', (req, res) => {
+app.delete('/api/v1/content', AuthMiddlware, async (req, res) => {
+        try {
+                 //@ts-ignore
+                console.log(req.userID)
+                const data = await ContentModel.deleteOne({
+                        _id: req.body._id,
+                        //@ts-ignore
+                         UserID: req.userID
 
+                })
+                 res.status(200).json(data)
+        }catch(e){
+                res.status(400).json(e)
+        }
 })
 
 
