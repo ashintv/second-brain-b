@@ -1,11 +1,13 @@
 import express from 'express'
-import z, { string } from 'zod'
-import { ContentModel, UserModel } from './db'
-import bcrypt from 'bcrypt'
+import z, { literal, string } from 'zod'
+import { ContentModel, LinkModel, UserModel } from './db'
+import bcrypt, { compareSync, hash } from 'bcrypt'
 import mongoose from 'mongoose'
 import jwt from 'jsonwebtoken'
 import { JWT_KEY } from './config'
 import { AuthMiddlware } from './middleware'
+import { randomHash } from './util'
+import cors from 'cors'
 // const JWT_KEY = 'ashintv'
 
 
@@ -22,6 +24,7 @@ const UserZSchema = z.object({
 
 const app = express()
 app.use(express.json())
+app.use(cors())
 
 
 app.post('/api/v1/signin', async (req, res) => {
@@ -44,7 +47,7 @@ app.post('/api/v1/signin', async (req, res) => {
                 if (passCheck) {
                         //@ts-ignore
                         const token = jwt.sign({ id: user._id }, JWT_KEY)
-                        res.status(200).json(token)
+                        res.status(200).json({ token })
                 } else {
                         res.status(400).json({ msg: 'Incorrect Password' })
                         return
@@ -84,6 +87,9 @@ app.get('/api/v1/content', AuthMiddlware, async (req, res) => {
                 const data = await ContentModel.find({
                         //@ts-ignore
                         UserID: req.userID
+                }).populate({
+                        path:'UserID',
+                        select: '-password'
                 })
 
                 res.status(200).json(data)
@@ -105,8 +111,15 @@ app.post('/api/v1/content', AuthMiddlware, async (req, res) => {
         const Parse = ContentF.safeParse(req.body)
         if (Parse.success) {
                 try {
-                        await ContentModel.create(req.body)
-                        res.status(200).json(Parse)
+                        await ContentModel.create({
+                                title: req.body.title,
+                                link: req.body.link,
+                                tags: req.body.tags,
+                                //@ts-ignore
+                                UserID: req.userID,
+                                Type: req.body.Type,
+                        })
+                        res.status(200).json({ Parse })
                 } catch (e) {
                         res.status(400).json(e)
                         return
@@ -120,27 +133,93 @@ app.post('/api/v1/content', AuthMiddlware, async (req, res) => {
 
 app.delete('/api/v1/content', AuthMiddlware, async (req, res) => {
         try {
-                 //@ts-ignore
+                //@ts-ignore
                 console.log(req.userID)
                 const data = await ContentModel.deleteOne({
                         _id: req.body._id,
                         //@ts-ignore
-                         UserID: req.userID
+                        UserID: req.userID
 
                 })
-                 res.status(200).json(data)
-        }catch(e){
+                res.status(200).json(data)
+        } catch (e) {
                 res.status(400).json(e)
         }
 })
 
 
-app.post('/api/v1/brain/share', (req, res) => {
+app.post('/api/v1/brain/share', AuthMiddlware, async (req, res) => {
+        const { share } = req.body
+        if (share) {
+                try {
+                        const Existing = await LinkModel.findOne({
+                                //@ts-ignore
+                                userID: req.userID
+                        })
+                        if (Existing) {
+                                res.status(200).json({
+                                        hash: Existing.hash
+                                })
+                                return
+                        }
+                } catch (e) {
+                        res.status(400).json(e)
+                }
+                const hash = randomHash(10)
+                try {
+                        const Save = await LinkModel.create({
+                                //@ts-ignore
+                                userID: req.userID,
+                                hash: hash
+                        })
+                        res.json({
+                                hash
+                        })
+
+                }
+                catch (e) {
+                        res.status(400).json(e)
+                }
+        } else {
+                console.log(share)
+                const del = await LinkModel.deleteOne({
+                        //@ts-ignore
+                        userID: req.userID,
+                })
+                res.status(200).json(del)
+        }
 
 })
 
-app.get('api/v1/brain/share/:shareLink', (req, res) => {
+app.get('/api/v1/brain/share/:shareLink', async (req, res) => {
+        const hash = req.params.shareLink
+        try {
+                const link = await LinkModel.findOne({
+                        hash: hash
+                })
+                if (!link) {
+                        res.status(400).json({ msg: 'Unable to fetch data please check the link' })
+                        return
+                }
+                const user = await UserModel.findOne({
+                        _id: link?.userID
+                })
 
+                const content = await ContentModel.find({
+                        UserID: link.userID
+                })
+                res.status(200).json({
+                        username: user?.username,
+                        content: content
+                })
+
+
+        } catch (e) {
+                res.status(400).json(e)
+        }
 })
 
-app.listen(3000)
+const PORT = 3000;
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`Server is running on http://0.0.0.0:${PORT}`);
+});
