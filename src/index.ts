@@ -214,3 +214,6 @@ if (DB_URL) {
 }else{
         console.log("DB_ERROR")
 }
+
+
+export  default app
